@@ -1,3 +1,4 @@
+%%writefile "C:\Users\krakl\Jupyter\machine_learning\nba_api\streamlit.py"
 
 import pandas as pd
 import streamlit as st
@@ -26,7 +27,7 @@ while True:
         temp_date = datetime.strptime(timestamp, "%m.%d.%y") - timedelta(days = c)
         temp_date = temp_date.strftime("%m.%d.%y")
         ir_path = r"C:\Users\krakl\Jupyter\machine_learning\nba_api\data\IR\injury_report_" + temp_date + ".txt"
-        if os.path.exists(current_rosters_path):
+        if os.path.exists(ir_path):
             break
         else:
             c+=1
@@ -142,7 +143,7 @@ warnings.filterwarnings("ignore")
 from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
 import sqlalchemy
-engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
+engine = sqlalchemy.create_engine('mysql+pymysql://root:@localhost:3306/nba_api')
 
 
 today = datetime.today().strftime("%Y-%m-%d")
