@@ -11,8 +11,8 @@ import plotly.express as px
 from PIL import Image
 import sqlalchemy
 engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
-import mysql.connector
-import pymysql
+# import mysql.connector
+# import pymysql
 
 # --- ST CONFIGURATION ---
 st.set_page_config(
@@ -21,13 +21,13 @@ st.set_page_config(
 
 )
 
-# Initialize connection.
-# Uses st.experimental_singleton to only run once.
-@st.experimental_singleton
-def init_connection():
-    return mysql.connector.connect(**st.secrets["mysql"])
+# # Initialize connection.
+# # Uses st.experimental_singleton to only run once.
+# @st.experimental_singleton
+# def init_connection():
+#     return mysql.connector.connect(**st.secrets["mysql"])
 
-conn = init_connection()
+# conn = init_connection()
 
 def pd_to_sql(df,table):
     df.columns = df.columns.str.strip()
