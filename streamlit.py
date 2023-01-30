@@ -1,4 +1,3 @@
-# %%writefile "C:\Users\krakl\Jupyter\machine_learning\nba_api\streamlit.py"
 
 import pandas as pd
 import streamlit as st
