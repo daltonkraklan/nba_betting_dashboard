@@ -11,8 +11,8 @@ import plotly.express as px
 from PIL import Image
 import sqlalchemy
 engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
-# import mysql.connector
-# import pymysql
+import mysql.connector
+import pymysql
 
 # --- ST CONFIGURATION ---
 st.set_page_config(
