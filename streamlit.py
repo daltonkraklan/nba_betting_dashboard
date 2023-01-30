@@ -1,4 +1,3 @@
-
 import pandas as pd
 import streamlit as st
 from time import time
@@ -10,12 +9,40 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from PIL import Image
+import sqlalchemy
+engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
+import mysql.connector
 
-image_0 = Image.open(r"C:\Users\krakl\Jupyter\machine_learning\nba_api\Logo-NBA.png")
-image_1 = Image.open(r"C:\Users\krakl\Jupyter\machine_learning\output.png")
+# --- ST CONFIGURATION ---
+st.set_page_config(
+    page_title = 'NBA Betting Dashboard',
+    layout = 'wide'
+
+)
+
+# Initialize connection.
+# Uses st.experimental_singleton to only run once.
+@st.experimental_singleton
+def init_connection():
+    return mysql.connector.connect(**st.secrets["mysql"])
+
+conn = init_connection()
+
+def pd_to_sql(df,table):
+    df.columns = df.columns.str.strip()
+    df.to_sql(
+        name = table,
+        con = engine,
+        index = False,
+        if_exists = 'replace'
+    )
+
+def pd_read_sql(table):
+    df = pd.read_sql(table , engine)
+    return df
 
 timestamp = datetime.today().strftime("%m.%d.%y")
-today_preds_path = r"C:\Users\krakl\Jupyter\machine_learning\nba_api\data\hist_predictions\today_preds_" + timestamp + ".txt" 
+today_preds_path = pd_read_sql('today_preds') 
 ir_path = r"C:\Users\krakl\Jupyter\machine_learning\nba_api\data\IR\injury_report_" + timestamp + ".txt"
 
 c=0
@@ -69,12 +96,7 @@ nba['bet_type_desc'] = np.where(nba['bet_type']=='SGL',
 nba = nba[nba['bet_type_desc']=='single']
 nba['bet_result_code'] = np.where(nba['bet_result']=='WON',True,False).astype(int) 
 
-# --- ST CONFIGURATION ---
-st.set_page_config(
-    page_title = 'NBA Betting Dashboard',
-    layout = 'wide'
 
-)
 
 # ---FILTER CONFIGURATION ---
 page = st.sidebar.selectbox('Choose your page:',
@@ -97,12 +119,14 @@ if page == 'Home':
                  """,
     )
     with col2:
-        st.image(image_0)
+        st.image("https://www.logodesignlove.com/images/classic/nba-logo.jpg",
+                caption = "https://www.logodesignlove.com/nba-logo-jerry-west")
+
 
 elif page == 'Code':
     st.header('Code and Code Output')
     st.subheader('\nOutput:')
-    st.image(image_1)
+    st.image("https://github.com/daltonkraklan/nba_betting_dashboard/blob/main/output.png?raw=true")
     
     code = r"""
 # Import Modules and define key variables
@@ -119,8 +143,6 @@ from sklearn.metrics import accuracy_score
 from os.path import exists
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.metrics import explained_variance_score,mean_absolute_error,r2_score
-from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
 from selenium import webdriver
 path = 'C:\\Program Files (x86)\\chromedriver.exe'
 from selenium.webdriver.common.keys import Keys
@@ -142,7 +164,8 @@ warnings.filterwarnings("ignore")
 from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
 import sqlalchemy
-engine = sqlalchemy.create_engine('mysql+pymysql://root:@localhost:3306/nba_api')
+import unicodedata
+engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
 
 
 today = datetime.today().strftime("%Y-%m-%d")
@@ -169,18 +192,36 @@ def distancer(row):
     coords_2 = row['GAME_COORDS']
     return geopy.distance.geodesic(coords_1, coords_2).miles
 
-def pd_to_sql(df,table):
+def pd_to_sql(df,table,schema = 'nba_api'):
+    engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
     df.columns = df.columns.str.strip()
     df.to_sql(
         name = table,
         con = engine,
+        schema = schema,
         index = False,
         if_exists = 'replace'
     )
 
 def pd_read_sql(table):
-    df = pd.read_sql(table , engine)
+    engine = sqlalchemy.create_engine('mysql+pymysql://root:9U7s0GjX%*dH*aQI3Bmf@localhost:3306/nba_api')
+    df = pd.read_sql(
+        sql = table,
+        con = engine,
+    )
     return df
+
+def strip_accents(text):
+    try:
+        text = unicode(text, 'utf-8')
+    except NameError: # unicode is a default on python 3 
+        pass
+
+    text = unicodedata.normalize('NFD', text)\
+           .encode('ascii', 'ignore')\
+           .decode("utf-8")
+
+    return str(text)
 
 # Starting Script
 print('Starting Script')
@@ -301,6 +342,85 @@ hist_odds = action_network
 hist_odds = hist_odds.sort_values(by=['GAME_DATE']).reset_index(drop=True)
 
 pd_to_sql(hist_odds,'hist_odds')
+
+end_time = time() - start
+print("\n\t\tExecution Time: %0.3fs" % end_time)
+
+print('\n\tScraping Injury Report:')
+start = time()
+
+box_score = pd_read_sql('box_score_archive')
+
+player_table = box_score
+team_ids = list(player_table['TEAM_ID'].unique())
+
+teams_table = player_table[['TEAM_ID','TEAM_ABBREVIATION']]
+teams_table = teams_table.drop_duplicates()
+
+current_rosters = pd_read_sql('current_rosters')
+current_rosters = pd.merge(current_rosters,teams_table[['TEAM_ID','TEAM_ABBREVIATION']], left_on = 'TeamID',right_on = 'TEAM_ID')
+
+driver = webdriver.Chrome(path)
+link = 'https://www.nbcsportsedge.com/basketball/nba/injury-report'
+driver.get(link)
+
+WebDriverWait(driver,20).until(EC.visibility_of_element_located((By.XPATH,"//*[@class='player-news-modal-icon player-news-modal-icon--wrapped player-news-modal-icon--yellow']")))
+
+box = driver.find_elements(By.XPATH,'//*[@id="injury-report-page-wrapper"]/div/div/div/div/div/div/table/tbody/tr')
+
+players = []
+positions = []
+status = []
+date = []
+injury = []
+returns = []
+news = []
+
+for i in box:
+    players.append(i.find_element(By.XPATH,'.//td/span/a').text)
+    positions.append(i.find_element(By.XPATH,'.//td[2]').text)
+    status.append(i.find_element(By.XPATH,'.//td[3]').text)
+    date.append(i.find_element(By.XPATH,'.//td[4]').text)
+    injury.append(i.find_element(By.XPATH,'.//td[5]').text)
+    returns.append(i.find_element(By.XPATH,'.//td[6]').text)
+    
+    if len(i.find_elements(By.XPATH,'.//td/div/span'))>0:
+        element = WebDriverWait(i, 20).until(EC.element_to_be_clickable((By.XPATH,'.//td/div/span')))
+        driver.execute_script(
+            "arguments[0].scrollIntoView({'block':'center','inline':'center'})",i.find_element(By.XPATH,'.//td/div/span')
+        )
+        element.click()
+        sleep(.1)
+        try:
+            update = WebDriverWait(driver,20).until(EC.visibility_of_element_located((By.XPATH,"//*[@class='player-news-modal-icon player-news-modal-icon--wrapped player-news-modal-icon--yellow']")))
+            # update = i.find_element(By.XPATH,"//*[@class='player-news-modal-icon player-news-modal-icon--wrapped player-news-modal-icon--yellow']")
+            sleep(.2)
+        except:
+            continue
+        try:
+            update = WebDriverWait(driver,20).until(EC.visibility_of_element_located((By.XPATH,"//*[@class='player-news-modal-icon player-news-modal-icon--wrapped player-news-modal-icon--gray']")))
+            # update = i.find_element(By.XPATH,"//*[@class='player-news-modal-icon player-news-modal-icon--wrapped player-news-modal-icon--gray']")
+            sleep(.2)
+        except:
+            continue
+        news.append(update.get_attribute('title'))
+        sleep(.1)
+        element.click()
+    else:
+        news.append("-")
+driver.quit()
+
+injury_report = pd.DataFrame({'PLAYER':players,'POSITION':positions,'STATUS':status,'DATE':date,'INJURY':injury,'RETURNS':returns,'NEWS':news})
+injury_report['PLAYER'] = injury_report['PLAYER'].apply(lambda x: strip_accents(x))
+injury_report['PLAYER'] = injury_report['PLAYER'].str.replace('Marvin Bagley','Marvin Bagley III')
+injury_report['PLAYER'] = injury_report['PLAYER'].str.replace('Otto Porter','Otto Porter Jr.')
+injury_report = pd.merge(injury_report,current_rosters[['PLAYER','TEAM_ABBREVIATION']])
+injury_report_cols = ['TEAM_ABBREVIATION'] + [i for i in injury_report.columns if i not in 'TEAM_ABBREVIATION']
+injury_report = injury_report[injury_report_cols]
+injury_report = injury_report.drop_duplicates('PLAYER').reset_index(drop=True)
+missing = [i for i in list(injury_report['PLAYER']) if i not in list(current_rosters['PLAYER'])]
+
+pd_to_sql(injury_report,'injury_report','nba_api')
 
 end_time = time() - start
 print("\n\t\tExecution Time: %0.3fs" % end_time)
@@ -776,7 +896,8 @@ display(formatted_preds)
 elif page == 'Tonights Bets':
     st.subheader("Tonights Predictions:")
     try:
-        today_preds = pd.read_csv(today_preds_path)
+        st.write("With a Mean Absolute Error of 4.1 Points, I place bets on any absolute differences > 4.1 Points between my predictions and Vegas'.")
+        today_preds = pd_read_sql('today_preds')
         l = ['OVER','UNDER','BET']
         formatted_preds = today_preds
         st.table(formatted_preds.style.apply(lambda x: ['background: green' if v in l else '' for v in x], axis=1).format(precision=1))
@@ -788,7 +909,7 @@ elif page == 'Tonights Bets':
         today_teams = [x for l in today_teams for x in l]
 
 
-        IR = pd.read_csv(ir_path)
+        IR = pd_read_sql('injury_report')
         IR = IR[IR['TEAM_ABBREVIATION'].isin(today_teams)]
 
         st.subheader("Injury Report:")
